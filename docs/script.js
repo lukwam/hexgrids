@@ -5,112 +5,284 @@ var puzzle = Puzzle();
 var currentCell = null;
 var direction = 0;
 var rebus = false;
-var tableIndex = {};
+var shade = "lightgrey";
 
-function advanceCell(x, y) {
-  if (direction) {
-    moveDown(x, y);
-  } else {
-    moveRight(x, y);
-  }
+function advanceCell(x, y) { if (direction) { moveDown(x, y); } else { moveRight(x, y); } }
+function retreatCell(x, y) { if (direction) { moveUp(x, y); } else { moveLeft(x, y); } }
+function updateCurrentCell(event) { currentCell = getElementXY(event.target); }
+
+function getElementXY(element) { return [parseInt(element.getAttribute("data-x")), parseInt(element.getAttribute("data-y"))]; }
+function getInput(x, y) { return document.getElementById("input-" + x + "-" + y); }
+function getBottomInput(x, y) { if (y < puzzle.height - 1) { return getInput(x, y + 1); } else { return null; } }
+function getLeftInput(x, y) { if (x > 0) { return getInput(x - 1, y); } else { return null; } }
+function getRightInput(x, y) { if (x < puzzle.width - 1) { return getInput(x + 1, y); } else { return null; } }
+function getTopInput(x, y) { if (y > 0) { return getInput(x, y - 1); } else { return null; } }
+
+function getAnswerFontSize(answer) {
+  let fontSize = puzzle.grid.fontSize;
+  if (answer.length == 2) { fontSize = 20.0; }
+  else if (answer.length == 3) { fontSize = 14.0; }
+  else if (answer.length == 4) { fontSize = 10.0; }
+  else if (answer.length == 5) { fontSize = 8.0; }
+  return fontSize;
 }
 
+function getAuthor() { return document.getElementById("puzzle-author").value; }
+function getDate() { return document.getElementById("puzzle-date").value; }
+function getHeight() { return document.getElementById("puzzle-height").value; }
+function getTitle() { return document.getElementById("puzzle-title").value; }
+function getWidth() { return document.getElementById("puzzle-width").value; }
+
+function setAuthor() { document.getElementById("puzzle-author").value = puzzle.author; }
+function setDate() { document.getElementById("puzzle-date").value = puzzle.date; }
+function setHeight() { document.getElementById("puzzle-height").value = puzzle.height; }
+function setTitle() { document.getElementById("puzzle-title").value = puzzle.title; }
+function setWidth() { document.getElementById("puzzle-width").value = puzzle.width; }
+
+function setBlock(x, y) { puzzle.grid.cell(x, y).block = true; }
+function setEmpty(x, y) { puzzle.grid.cell(x, y).empty = true; }
+
+function unsetBlock(x, y) { puzzle.grid.cell(x, y).block = false; }
+function unsetEmpty(x, y) { puzzle.grid.cell(x, y).empty = false; }
+
+
 function clickCommands(event) {
-  var x = parseInt(event.target.getAttribute("data-x"));
-  var y = parseInt(event.target.getAttribute("data-y"));
+  var [x, y] = getElementXY(event.target);
   switch (true) {
+
     case event.altKey:
       console.log("Alt-click");
+      toggleTopBar(x, y);
       break;
+
     case event.ctrlKey:
       console.log("Ctrl-click");
       break;
+
     case event.metaKey:
       console.log("Meta-click");
+      toggleLeftBar(x, y);
       break;
+
     case event.shiftKey:
       console.log("Shift-click");
+      toggleShadeSquare(x, y);
       break;
+
     default:
       break;
   }
 }
 
+function doubleClickCommands(event) {
+  var [x, y] = getElementXY(event.target);
+  switch (true) {
+
+    case event.altKey:
+      console.log("Alt-double-click");
+      break;
+
+    case event.ctrlKey:
+      console.log("Ctrl-double-click");
+      break;
+
+    case event.metaKey:
+      console.log("Meta-double-click");
+      break;
+
+    case event.shiftKey:
+      console.log("Shift-double-click");
+      break;
+
+    default:
+      console.log("Double-click");
+      disableEmptyCell(x, y);
+      break;
+  }
+}
+
+
 function createGrid() {
-  puzzle.initializeGrid();
+  puzzle.initializeGrid(puzzle.width, puzzle.height);
   refreshGrid();
-  var button = document.getElementById("create-grid-button");
-  button.remove()
+  document.getElementById("create-grid-button").style.display = "none";
 }
 
-function disableBlock(event) {
-  let x = parseInt(event.target.getAttribute("data-x"));
-  let y = parseInt(event.target.getAttribute("data-y"));
-  puzzle.grid.cell(x, y).block = false;
-  event.target.style.backgroundColor = "rgba(0, 0, 0, 0)";
+function createInput(x, y) {
+  let input = document.createElement("input");
+  input.id = "input-" + x + "-" + y;
+  input.setAttribute("data-x", x);
+  input.setAttribute("data-y", y);
+  input.type = "text";
+
+  // add the answer
+  let answer = puzzle.grid.cell(x, y).answer;
+  if (answer) { input.value = answer; }
+
+  let fontSize = getAnswerFontSize(answer);
+
+  // set the styles
+  input.style.border = "0px";
+  input.style.boxSizing = "border-box";
+  input.style.fontSize = fontSize + "px";
+  input.style.height = "100%";
+  input.style.padding = 0;
+  input.style.textAlign = "center";
+  input.style.verticalAlign = "middle";
+  input.style.width = "100%";
+
+  // add event listeners
+  input.addEventListener("click", clickCommands);
+  // input.addEventListener("dblclick", doubleClickCommands);
+  input.addEventListener("focusin", updateCurrentCell);
+  input.addEventListener("focusout", updateAnswer);
+  input.addEventListener("keydown", keyboardCommands);
+
+  return input;
 }
 
-function disableCell(event) {
-  event.target.readOnly = true;
-  event.target.value = "";
-  let x = parseInt(event.target.getAttribute("data-x"));
-  let y = parseInt(event.target.getAttribute("data-y"));
+//
+// Blocks
+//
+function disableBlock(x, y) {
+  let input = getInput(x, y);
   puzzle.grid.cell(x, y).answer = "";
-  puzzle.grid.cell(x, y).black = false;
-  puzzle.grid.cell(x, y).empty = true;
-}
-
-function disableLeftBar(event) {
-  let x = parseInt(event.target.getAttribute("data-x"));
-  let y = parseInt(event.target.getAttribute("data-y"));
-  let leftInput = document.getElementById("input-" + (x - 1) + "-" + y);
-  puzzle.grid.cell(x - 1, y).rightBar = false;
-  event.target.style.borderLeft = puzzle.grid.borderWidth + "px solid #bbb";
-  leftInput.style.borderRight = puzzle.grid.borderWidth + "px solid #bbb";
-}
-
-function disableTopBar(event) {
-  let x = parseInt(event.target.getAttribute("data-x"));
-  let y = parseInt(event.target.getAttribute("data-y"));
-  let topInput = document.getElementById("input-" + x + "-" + (y - 1));
-  puzzle.grid.cell(x, y - 1).bottomBar = false;
-  event.target.style.borderTop = puzzle.grid.borderWidth + "px solid #bbb";
-  topInput.style.borderBottom = puzzle.grid.borderWidth + "px solid #bbb";
-}
-
-function enableBlock(event) {
-  let x = parseInt(event.target.getAttribute("data-x"));
-  let y = parseInt(event.target.getAttribute("data-y"));
-  puzzle.grid.cell(x, y).block = true;
-  puzzle.grid.cell(x, y).answer = "";
-  event.target.style.backgroundColor = "black";
-  event.target.style.border = puzzle.grid.borderWidth + "px solid black";
-}
-
-function enableCell(event) {
-  event.target.readOnly = false;
-  let x = parseInt(event.target.getAttribute("data-x"));
-  let y = parseInt(event.target.getAttribute("data-y"));
   puzzle.grid.cell(x, y).block = false;
   puzzle.grid.cell(x, y).empty = false;
+  input.style.display = "inline-block";
+  input.parentElement.style.backgroundColor = "rgba(0, 0, 0, 0)";
+  console.log("Disabled block for: " + x + ", " + y);
 }
 
-function enableLeftBar(event) {
-  let x = parseInt(event.target.getAttribute("data-x"));
-  let y = parseInt(event.target.getAttribute("data-y"));
-  let leftInput = document.getElementById("input-" + (x - 1) + "-" + y);
-  puzzle.grid.cell(x - 1, y).rightBar = true;
-  event.target.style.borderLeft = puzzle.grid.borderWidth + "px solid black";
-  leftInput.style.borderRight = puzzle.grid.borderWidth + "px solid black";
+function enableBlock(x, y) {
+  let input = getInput(x, y);
+  puzzle.grid.cell(x, y).answer = false;
+  puzzle.grid.cell(x, y).block = true;
+  puzzle.grid.cell(x, y).empty = false;
+  input.style.display = "none";
+  input.value = "";
+  input.parentElement.style.backgroundColor = "black";
+  console.log("Enabled block for: " + x + ", " + y);
 }
 
-function enableTopBar(event) {
-  let x = parseInt(event.target.getAttribute("data-x"));
-  let y = parseInt(event.target.getAttribute("data-y"));
-  let topInput = document.getElementById("input-" + x + "-" + (y - 1));
+function toggleBlock(x, y) {
+  if (puzzle.grid.cell(x, y).block) { disableBlock(x, y); } else { enableBlock(x, y); }
+}
+
+//
+// Empty Cells
+//
+function disableEmptyCell(x, y) {
+  let input = getInput(x, y);
+  puzzle.grid.cell(x, y).answer = "";
+  puzzle.grid.cell(x, y).block = false;
+  puzzle.grid.cell(x, y).empty = false;
+  input.style.display = "inline-block";
+  input.parentElement.style.backgroundColor = "rgba(0, 0, 0, 0)";
+  console.log("Disabled empty for: " + x + ", " + y);
+}
+
+function enableEmptyCell(x, y) {
+  let input = getInput(x, y);
+  puzzle.grid.cell(x, y).answer = false;
+  puzzle.grid.cell(x, y).block = false;
+  puzzle.grid.cell(x, y).empty = true;
+  input.style.display = "none";
+  input.value = "";
+  console.log("Enabled empty for: " + x + ", " + y);
+}
+
+function toggleEmptyCell(x, y) {
+  if (puzzle.grid.cell(x, y).empty) { disableEmptyCell(x, y); } else { enableEmptyCell(x, y); }
+}
+
+
+//
+// Bottom Bars
+//
+
+
+//
+// Left Bars
+//
+function disableLeftBar(x, y) {
+  if (x == 0) { return; }
+  let input = getInput(x, y);
+  let leftInput = getLeftInput(x, y);
+  puzzle.grid.leftCell(x, y).rightBar = false;
+  input.parentElement.style.borderLeft = puzzle.grid.gridLineWidth + "px solid black";
+  leftInput.parentElement.style.borderRight = puzzle.grid.gridLineWidth + "px solid black";
+  console.log("Disabled left bar for: " + x + ", " + y);
+}
+
+function enableLeftBar(x, y) {
+  if (x == 0) { return; }
+  let input = getInput(x, y);
+  let leftInput = getLeftInput(x, y);
+  puzzle.grid.leftCell(x, y).rightBar = true;
+  input.parentElement.style.borderLeft = puzzle.grid.borderWidth + "px solid black";
+  leftInput.parentElement.style.borderRight = puzzle.grid.borderWidth + "px solid black";
+  console.log("Enabled left bar for: " + x + ", " + y);
+}
+
+function toggleLeftBar(x, y) {
+  if (x == 0) { return; }
+  if (puzzle.grid.leftCell(x, y).rightBar) { disableLeftBar(x, y); } else { enableLeftBar(x, y); }
+}
+
+//
+// Right Bars
+//
+
+//
+// Top Bars
+//
+function disableTopBar(x, y) {
+  if (y == 0) { return; }
+  let input = getInput(x, y);
+  let topInput = getTopInput(x, y);
+  puzzle.grid.topCell(x, y).bottomBar = false;
+  input.parentElement.style.borderTop = puzzle.grid.gridLineWidth + "px solid black";
+  topInput.parentElement.style.borderBottom = puzzle.grid.gridLineWidth + "px solid black";
+  console.log("Disabled top bar for: " + x + ", " + y);
+}
+
+function enableTopBar(x, y) {
+  if (y == 0) { return; }
+  let input = getInput(x, y);
+  let topInput = getTopInput(x, y);
   puzzle.grid.cell(x, y - 1).bottomBar = true;
-  event.target.style.borderTop = puzzle.grid.borderWidth + "px solid black";
-  topInput.style.borderBottom = puzzle.grid.borderWidth + "px solid black";
+  input.parentElement.style.borderTop = puzzle.grid.borderWidth + "px solid black";
+  topInput.parentElement.style.borderBottom = puzzle.grid.borderWidth + "px solid black";
+  console.log("Enabled top bar for: " + x + ", " + y);
+}
+
+function toggleTopBar(x, y) {
+  if (y == 0) { return; }
+  if (puzzle.grid.cell(x, y - 1).bottomBar) { disableTopBar(x, y); } else { enableTopBar(x, y); }
+}
+
+//
+// Shade Squares
+//
+function disableShadeSquare(x, y) {
+  let input = getInput(x, y);
+  puzzle.grid.cell(x, y).shadeSquare = false;
+  input.style.backgroundColor = "rgba(0, 0, 0, 0)";
+  input.parentElement.style.backgroundColor = "rgba(0, 0, 0, 0)";
+  console.log("Disabled shade square for: " + x + ", " + y);
+}
+
+function enableShadeSquare(x, y) {
+  let input = getInput(x, y);
+  puzzle.grid.cell(x, y).shadeSquare = true;
+  input.style.backgroundColor = shade;
+  input.parentElement.style.backgroundColor = shade;
+  console.log("Enabled shade square for: " + x + ", " + y);
+}
+
+function toggleShadeSquare(x, y) {
+  if (puzzle.grid.cell(x, y).shadeSquare) { disableShadeSquare(x, y); } else { enableShadeSquare(x, y); }
 }
 
 function initializePuzzle() {
@@ -122,8 +294,7 @@ function initializePuzzle() {
 }
 
 function keyboardCommands(event) {
-  var x = parseInt(event.target.getAttribute("data-x"));
-  var y = parseInt(event.target.getAttribute("data-y"));
+  let [x, y] = getElementXY(event.target);
 
   if (rebus) {
     return;
@@ -161,17 +332,31 @@ function keyboardCommands(event) {
     case "Delete":
     case ".": // Period
       puzzle.grid.cell(x, y).empty = true;
-      disableCell(event);
+      enableEmptyCell(x, y);
       break;
 
     case "Enter":
-      if (direction) {
-        if (y > 0) {
-          toggleTopBar(event);
+      if (event.metaKey) {
+        if (direction) {
+          if (y > 0) {
+            toggleLeftBar(x, y);
+          }
+        }
+        else {
+          if (x > 0) {
+            toggleTopBar(x, y);
+          }
         }
       } else {
-        if (x > 0) {
-          toggleLeftBar(event);
+        if (direction) {
+          if (y > 0) {
+            toggleTopBar(x, y);
+          }
+        }
+        else {
+          if (x > 0) {
+            toggleLeftBar(x, y);
+          }
         }
       }
       break;
@@ -179,14 +364,14 @@ function keyboardCommands(event) {
     case "Insert":
     case ",": // Comma
     case "#": // Hash
-      enableBlock(event);
+      toggleBlock(x, y);
       advanceCell(x, y);
       event.preventDefault();
       break;
 
     case "Tab":
     case " ": // Space
-      advanceCell(x, y);
+      if (event.shiftKey) { retreatCell(x, y); } else { advanceCell(x, y); }
       event.preventDefault();
       break;
 
@@ -196,7 +381,7 @@ function keyboardCommands(event) {
       break;
 
     default:
-      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      if (event.altKey || event.ctrlKey || event.metaKey) {
         return;
       }
       if (/^[a-zA-Z0-9]$/.test(event.key)) {
@@ -211,60 +396,62 @@ function keyboardCommands(event) {
 }
 
 function moveRight(x, y) {
-  if (x < puzzle.width - 1) {
-    var input = document.getElementById("input-" + (x + 1) + "-" + y);
-    input.focus();
+  let rightInput = getRightInput(x, y);
+  if (rightInput) {
+    rightInput.focus();
   } else {
+    // move to beginning of next row
     if (y < puzzle.height - 1) {
-      var input = document.getElementById("input-0-" + (y + 1));
-      input.focus();
+      getInput(0, y + 1).focus();
+      // move to first cell: 0, 0
     } else {
-      var input = document.getElementById("input-0-0");
-      input.focus();
+      getInput(0, 0).focus();
     }
   }
 }
 
 function moveLeft(x, y) {
-  if (x > 0) {
-    var input = document.getElementById("input-" + (x - 1) + "-" + y);
-    input.focus();
+  let leftInput = getLeftInput(x, y);
+  if (leftInput) {
+    leftInput.focus();
   } else {
+    // move to end of previous row
     if (y > 0) {
-      var input = document.getElementById("input-" + (puzzle.width - 1) + "-" + (y - 1));
-      input.focus();
+      getInput(puzzle.width - 1, y - 1).focus();
+      // move to last cell: -1, -1
     } else {
-      var input = document.getElementById("input-" + (puzzle.width - 1) + "-" + (puzzle.height - 1));
-      input.focus();
+      getInput(puzzle.width - 1, puzzle.height - 1).focus();
     }
   }
 }
 
 function moveDown(x, y) {
-  if (y < puzzle.height - 1) {
-    var input = document.getElementById("input-" + x + "-" + (y + 1));
-    input.focus();
+  let bottomInput = getBottomInput(x, y);
+  if (bottomInput) {
+    bottomInput.focus();
   } else {
+    // move to beginning of next column
     if (x < puzzle.width - 1) {
-      var input = document.getElementById("input-" + (x + 1) + "-0");
-      input.focus();
+      getInput(x + 1, 0).focus();
+      // move to first cell: 0, 0
     } else {
-      var input = document.getElementById("input-0-0");
-      input.focus();
+      getInput(0, 0).focus();
     }
   }
 }
 
 function moveUp(x, y) {
-  if (y > 0) {
-    var input = document.getElementById("input-" + x + "-" + (y - 1));
-    input.focus();
+  let topInput = getTopInput(x, y);
+  if (topInput) {
+    topInput.focus();
   } else {
+    // move to end of previous column
     if (x > 0) {
-      var input = document.getElementById("input-" + (x - 1) + "-" + (puzzle.height - 1));
+      var input = getInput(x - 1, puzzle.height - 1);
       input.focus();
+      // move to last cell: -1, -1
     } else {
-      var input = document.getElementById("input-" + (puzzle.width - 1) + "-" + (puzzle.height - 1));
+      var input = getInput(puzzle.width - 1, puzzle.height - 1);
       input.focus();
     }
   }
@@ -273,6 +460,7 @@ function moveUp(x, y) {
 function refreshGrid() {
   console.log("Refresing the grid...")
   var grid = document.getElementById("grid");
+  const borderWidth = puzzle.grid.borderWidth;
 
   // create the new table element
   var table = document.createElementNS("http://www.w3.org/1999/xhtml", "table");
@@ -285,7 +473,7 @@ function refreshGrid() {
   table.style.borderColor = puzzle.grid.borderColor;
   table.style.borderSpacing = "0px";
   table.style.borderStyle = puzzle.grid.borderStyle;
-  table.style.borderWidth = puzzle.grid.borderWidth + "px";
+  table.style.borderWidth = borderWidth + "px";
 
   // create the table body element
   var tbody = document.createElement("tbody");
@@ -294,148 +482,64 @@ function refreshGrid() {
   for (var y = 0; y < puzzle.height; y++) {
 
     // create a row
-    var row = document.createElement("tr");
+    var tr = document.createElement("tr");
 
     // create the cells
     for (var x = 0; x < puzzle.width; x++) {
+      let gridCell = puzzle.grid.cell(x, y);
+      let bottomCell = null;
+      let leftCell = null;
+      let rightCell = null;
+      let topCell = null;
+
+      if (y < puzzle.height - 1) { bottomCell = puzzle.grid.cell(x, y + 1); }
+      if (x > 0) { leftCell = puzzle.grid.cell(x - 1, y); }
+      if (x < puzzle.width - 1) { rightCell = puzzle.grid.cell(x + 1, y); }
+      if (y > 0) { topCell = puzzle.grid.cell(x, y - 1); }
 
       // create cell
-      var cell = document.createElement("td");
-      cell.setAttribute("data-x", x);
-      cell.setAttribute("data-y", y);
-      cell.style.border = "none";
-      cell.style.margin = 0;
-      cell.style.padding = 0;
+      var td = document.createElement("td");
+      td.id = "cell-" + x + "-" + y;
+      td.setAttribute("data-x", x);
+      td.setAttribute("data-y", y);
 
-      // create input
-      var input = document.createElement("input");
-      input.id = "input-" + x + "-" + y;
-      input.addEventListener("click", clickCommands);
-      input.addEventListener("dblclick", enableCell);
-      input.addEventListener("focusin", updateCurrentCell);
-      input.addEventListener("focusout", updateAnswer);
-      input.addEventListener("keydown", keyboardCommands);
-      input.setAttribute("data-x", x);
-      input.setAttribute("data-y", y);
-      input.type = "text";
+      td.style.border = puzzle.grid.gridLineWidth + "px solid black";
+      td.style.padding = "2px";
 
-      let borderWidth = puzzle.grid.borderWidth;
-      let gridCell = puzzle.grid.cell(x, y);
+      td.addEventListener("dblclick", doubleClickCommands);
 
-      let bottomCell = null;
-      if (y < puzzle.height - 1) {
-        bottomCell = puzzle.grid.cell(x, y + 1);
-      }
+      // handle blocks by setting background to black
+      if (gridCell && gridCell.block) { td.style.backgroundColor = "black"; }
+      // handle empty cells by setting background to transparent
+      else if (gridCell.empty) { td.style.backgroundColor = "rgba(0, 0, 0, 0)"; }
+      // handle regular cells by creating inputs
+      else { var input = createInput(x, y); td.appendChild(input); }
 
-      let leftCell = null;
-      if (x > 0) {
-        leftCell = puzzle.grid.cell(x - 1, y);
-      }
+      // handle left bar
+      if (puzzle.grid.hasLeftBar(x, y)) { td.style.borderLeft = puzzle.grid.borderWidth + "px solid black"; }
 
-      let rightCell = null;
-      if (x < puzzle.width - 1) {
-        rightCell = puzzle.grid.cell(x + 1, y);
-      }
+      // handle right bar
+      if (puzzle.grid.hasRightBar(x, y)) { td.style.borderRight = puzzle.grid.borderWidth + "px solid black"; }
 
-      let topCell = null;
-      if (y > 0) {
-        topCell = puzzle.grid.cell(x, y - 1);
-      }
+      // handle top bar
+      if (puzzle.grid.hasTopBar(x, y)) { td.style.borderTop = puzzle.grid.borderWidth + "px solid black"; }
 
-      // handle blocks
-      if (gridCell.block) {
-        input.readOnly = true;
-        input.style.backgroundColor = "black";
-        input.style.border = borderWidth + "px solid black";
+      // handle bottom bar
+      if (puzzle.grid.hasBottomBar(x, y)) { td.style.borderBottom = puzzle.grid.borderWidth + "px solid black"; }
 
-      // handle empty cells
-      } else if (gridCell.empty) {
-        input.readOnly = true;
-        input.style.backgroundColor = "rgba(0, 0, 0, 0)";
-
-      // handle bars
-      } else {
-        input.style.backgroundColor = "rgba(0, 0, 0, 0)";
-        input.style.border = borderWidth + "px solid #bbb";
-
-        // check for left bar
-        if (x == 0 || leftCell.empty || leftCell.block || leftCell.rightBar) {
-          input.style.borderLeft = borderWidth + "px solid black";
-        }
-
-        // check for right bar
-        if (x == puzzle.width - 1 || rightCell.empty || rightCell.block || gridCell.rightBar) {
-          input.style.borderRight = borderWidth + "px solid black";
-        }
-
-        // check for top bar
-        if (y == 0 || topCell.empty || topCell.block || topCell.bottomBar) {
-          input.style.borderTop = borderWidth + "px solid black";
-        }
-
-        // check for bottom bar
-        if (y == puzzle.height - 1 || bottomCell.empty || bottomCell.block || gridCell.bottomBar) {
-          input.style.borderBottom = borderWidth + "px solid black";
-        }
-      }
-
-      input.style.boxSizing = "border-box";
-      input.style.fontSize = puzzle.grid.fontSize + "px";
-      input.style.margin = 0;
-      input.style.padding = 0;
-      input.style.textAlign = "center";
-      input.style.verticalAlign = "middle";
-      input.style.height = "100%";
-      input.style.width = "100%";
-      input.value = gridCell.answer;
-
-      cell.appendChild(input);
-      row.appendChild(cell);
+      tr.appendChild(td);
     }
 
-    tbody.appendChild(row);
+    tbody.appendChild(tr);
   }
 
   table.appendChild(tbody);
   grid.parentNode.replaceChild(table, grid);
   if (currentCell) {
     var [x, y] = currentCell;
-    var input = document.getElementById("input-" + x + "-" + y);
+    var input = getInput(x, y);
     input.focus();
   }
-}
-
-function retreatCell(x, y) {
-  if (direction) {
-    moveUp(x, y);
-  } else {
-    moveLeft(x, y);
-  }
-}
-
-function setAuthor() {
-  var puzzleAuthor = document.getElementById("puzzle-author");
-  puzzleAuthor.value = puzzle.author;
-}
-
-function setDate() {
-  var puzzleDate = document.getElementById("puzzle-date");
-  puzzleDate.value = puzzle.date;
-}
-
-function setHeight() {
-  var puzzleHeight = document.getElementById("puzzle-height");
-  puzzleHeight.value = puzzle.height;
-}
-
-function setTitle() {
-  var puzzleTitle = document.getElementById("puzzle-title");
-  puzzleTitle.value = puzzle.title;
-}
-
-function setWidth() {
-  var puzzleWidth = document.getElementById("puzzle-width");
-  puzzleWidth.value = puzzle.width;
 }
 
 function toggleDirection() {
@@ -451,16 +555,6 @@ function toggleDirection() {
   refreshGrid();
 }
 
-function toggleLeftBar(event) {
-  var x = parseInt(event.target.getAttribute("data-x"));
-  var y = parseInt(event.target.getAttribute("data-y"));
-  if (puzzle.grid.cell(x - 1, y).rightBar) {
-    disableLeftBar(event);
-  } else {
-    enableLeftBar(event);
-  }
-}
-
 function toggleRebus() {
   var gridDirection = document.getElementById("grid-entry-style");
   if (rebus) {
@@ -473,24 +567,15 @@ function toggleRebus() {
   console.log("Toggled rebus entry: " + rebus);
 }
 
-function toggleTopBar(event) {
-  var x = parseInt(event.target.getAttribute("data-x"));
-  var y = parseInt(event.target.getAttribute("data-y"));
-  if (puzzle.grid.cell(x, y - 1).bottomBar) {
-    disableTopBar(event);
-  } else {
-    enableTopBar(event);
-  }
-}
-
 function updateAnswer(event) {
   var answer = event.target.value;
-  var x = parseInt(event.target.getAttribute("data-x"));
-  var y = parseInt(event.target.getAttribute("data-y"));
+  var [x, y] = getElementXY(event.target);
   var cell = puzzle.grid.cell(x, y);
   var original = cell.answer;
   cell.answer = answer.trim().toUpperCase();
   event.target.value = cell.answer;
+  let fontSize = getAnswerFontSize(cell.answer);
+  event.target.style.fontSize = fontSize + "px";
   if (original != cell.answer) {
     console.log("Updated the answer for " + x + "-" + y + ": " + cell.answer);
   }
@@ -503,13 +588,6 @@ function updateAuthor() {
   puzzle.author = author;
   puzzleAuthor.value = puzzle.author;
   console.log("Updated the author: " + author);
-}
-
-function updateCurrentCell(event) {
-  var x = parseInt(event.target.getAttribute("data-x"));
-  var y = parseInt(event.target.getAttribute("data-y"));
-  currentCell = [x, y];
-  // console.log("Updated the current cell: " + currentCell);
 }
 
 function updateDate() {
